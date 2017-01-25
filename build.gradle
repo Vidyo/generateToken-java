@@ -1,0 +1,21 @@
+group 'io.vidyo'
+
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'commons-codec:commons-codec:1.10'
+}
+
+jar {
+    manifest {
+        attributes("Main-Class" : "io.vidyo.util.GenerateToken")
+    }
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from sourceSets.main.allJava
+}
