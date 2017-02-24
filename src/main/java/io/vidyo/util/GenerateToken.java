@@ -6,6 +6,8 @@ import org.apache.commons.codec.digest.HmacUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 
 public class GenerateToken {
 
@@ -15,7 +17,7 @@ public class GenerateToken {
 
 
     public static String generateProvisionToken(String key, String jid, String expires, String vcard) throws NumberFormatException {
-        String payload = String.join(DELIM, PROVISION_TOKEN, jid, calculateExpiry(expires), vcard);
+        String payload = String.join(DELIM, PROVISION_TOKEN, jid, expires, vcard);
         return new String(Base64.encodeBase64(
                 (String.join(DELIM, payload, HmacUtils.hmacSha384Hex(key, payload))).getBytes()
         ));
@@ -37,6 +39,7 @@ public class GenerateToken {
         System.out.println("--userName      Username to generate a token for");
         System.out.println("--vCardFile     Path to the XML file containing a vCard for the user (optional)");
         System.out.println("--expiresInSecs Number of seconds the token will be valid");
+        System.out.println("--expiresAt     Time at which the token will expire ex: (2055-10-27T10:54:22Z) can be used instead of expiresInSecs");
         System.out.println();
         System.exit(1);
     }
@@ -50,8 +53,9 @@ public class GenerateToken {
         String key = null;
         String appID = null;
         String userName = null;
-        String vCardFilePath = null; // optional
-        String expiresInSeconds = null;
+        String vCardFilePath = null;    // optional
+        String expiresInSeconds = null; // required if expiresAt is not set
+        String expiresAt = null;        // optional; used only if expiresInSeconds is not set
 
         for(String arg : args) {
             String[] parts = arg.split("=");
@@ -76,6 +80,10 @@ public class GenerateToken {
                     if (parts.length > 1) {
                         expiresInSeconds = parts[1];
                     }
+                } else if ("--expiresAt".equals(parts[0])) {
+                	if (parts.length > 1) {
+                		expiresAt = parts[1];
+                	}
                 }
             }
         }
@@ -89,11 +97,29 @@ public class GenerateToken {
         } else if (userName == null) {
             System.out.println("userName not set");
             printUsageAndExit();
-        } else if (expiresInSeconds == null) {
-            System.out.println("expiresInSecs not set");
-            printUsageAndExit();
         }
-
+        
+        // calculate expiration
+        String expires = "";
+        if (expiresInSeconds != null) {
+        	expires = calculateExpiry(expiresInSeconds);
+        } else {
+        	Instant instant = null;
+        	if (expiresAt != null) {
+        		try {
+					instant = Instant.parse(expiresAt);
+				} catch (DateTimeParseException e) {
+					System.out.println("Invalid date format. Ex: (2055-10-27T10:54:22Z)");
+					printUsageAndExit();
+				}
+        	} else {
+        		System.out.println("expiresInSecs or expiresAt not set");
+                printUsageAndExit();
+        	}
+        	
+        	expires = String.valueOf(EPOCH_SECONDS + instant.getEpochSecond());
+        }
+        
         // vCardFile is optional
         String vCard = "";
         if (vCardFilePath != null) {
@@ -116,10 +142,11 @@ public class GenerateToken {
             System.out.println("Setting userName      :  " + userName);
             System.out.println("Setting vCardFile     :  " + vCardFilePath);
             System.out.println("Setting expiresInSecs :  " + expiresInSeconds);
+            System.out.println("Setting expiresAt     :  " + expiresAt);
             System.out.println("Generating Token...");
-            System.out.println(generateProvisionToken(key, userName + "@" + appID, expiresInSeconds, vCard));
+            System.out.println(generateProvisionToken(key, userName + "@" + appID, expires, vCard));
         } catch (NumberFormatException nfe) {
-            System.out.println("Failed to parse expiresInSeconds: " + expiresInSeconds);
+            System.out.println("Failed to parse expiration time: " + expires);
             System.exit(1);
         }
         System.exit(0);
