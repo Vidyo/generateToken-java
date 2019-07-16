@@ -1,4 +1,4 @@
-# generateToken-java
+# vidyo.io-generate-token-java
 
 To build, run:
 
